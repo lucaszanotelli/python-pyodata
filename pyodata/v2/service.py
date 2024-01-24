@@ -49,7 +49,7 @@ def encode_multipart(boundary, http_requests):
 
             # request  line (method + path + query params)
             line = f'{req.get_method()} {req.get_path()}'
-            query_params = urlencode(req.get_query_params())
+            query_params = urlencode(req.get_query_params(), safe='!')
             if query_params:
                 line += '?' + query_params
             line += ' HTTP/1.1'
@@ -344,7 +344,7 @@ class ODataHttpRequest:
         url, body, headers, params = self._build_request()
 
         response = self._connection.request(
-            self.get_method(), url, headers=headers, params=urlencode(params), data=body)
+            self.get_method(), url, headers=headers, params=urlencode(params, safe='!'), data=body)
 
         return self._call_handler(response)
 
