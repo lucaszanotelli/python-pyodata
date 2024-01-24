@@ -240,6 +240,7 @@ class ODataHttpRequest:
         self._logger = logging.getLogger(LOGGER_NAME)
         self._customs = {}  # string -> string hash
         self._next_url = None
+        self._delta_token = None
 
     @property
     def handler(self):
@@ -684,6 +685,10 @@ class QueryRequest(ODataHttpRequest):
         self._next_url = next_url
         return self
 
+    def delta_token(self, delta_token):
+        self._delta_token = delta_token
+        return self
+
     def expand(self, expand):
         """Sets the expand expressions."""
         self._expand = expand
@@ -757,6 +762,9 @@ class QueryRequest(ODataHttpRequest):
 
         if self._expand is not None:
             qparams['$expand'] = self._expand
+            
+        if self._delta_token is not None:
+            qparams['!deltatoken'] = self._delta_token
 
         if self._inlinecount:
             qparams['$inlinecount'] = 'allpages'
@@ -1372,16 +1380,25 @@ class GetEntitySetRequest(QueryRequest):
 
 class ListWithTotalCount(list):
     """
-    A list with the additional property total_count and next_url.
+    A list with the additional property total_count, next_url and delta_token.
 
     If set, use next_url to fetch the next batch of entities.
     """
 
-    def __init__(self, total_count, next_url):
+    def __init__(self, total_count, next_url, delta_token):
         super(ListWithTotalCount, self).__init__()
         self._total_count = total_count
         self._next_url = next_url
+        self._delta_token = delta_token
 
+    @property
+    def delta_token(self):
+        """
+        URL to retrieve only updated information related to this delta queue.
+        None if extraction is still going or if OData service is not delta-enabled.
+        """
+        return self._delta_token
+    
     @property
     def next_url(self):
         """
@@ -1534,17 +1551,20 @@ class EntitySetProxy:
             entities = content['d']
             total_count = None
             next_url = None
+            delta_token = None
 
             if isinstance(entities, dict):
                 if '__count' in entities:
                     total_count = int(entities['__count'])
                 if '__next' in entities:
                     next_url = entities['__next']
+                if '__delta' in entities:
+                    delta_token = entities['__delta']
                 entities = entities['results']
 
             self._logger.info('Fetched %d entities', len(entities))
 
-            result = ListWithTotalCount(total_count, next_url)
+            result = ListWithTotalCount(total_count, next_url, delta_token)
             for props in entities:
                 entity = EntityProxy(self._service, self._entity_set, self._entity_set.entity_type, props)
                 result.append(entity)
